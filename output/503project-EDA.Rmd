@@ -1,0 +1,70 @@
+---
+title: "503project-EDA"
+author: "Maha Jayapal"
+date: "6/8/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading the packages
+```{r}
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+```{r}
+stroke<- read.csv('c:\\maha\\503\\healthcare-dataset-stroke-data.csv', header = TRUE)
+```
+```{r}
+str(stroke)
+```
+```{r}
+dim(stroke)
+```
+```{r}
+hist.data.frame(stroke)
+```
+```{r}
+skewness(stroke$avg_glucose_level)
+skewness(stroke$age)
+```
+```{r}
+table(stroke$gender)
+table(stroke$hypertension)
+table(stroke$heart_disease)
+table(stroke$ever_married)
+table(stroke$work_type)
+table(stroke$Residence_type)
+table(stroke$smoking_status)
+table(stroke$stroke)
+```
+```{r}
+stroke$gender <- as.numeric(as.factor(stroke$gender))
+stroke$ever_married <- as.numeric(as.factor(stroke$ever_married))
+stroke$work_type <- as.numeric(as.factor(stroke$work_type))
+stroke$Residence_type <- as.numeric(as.factor(stroke$Residence_type))
+stroke$smoking_status <- as.numeric(as.factor(stroke$smoking_status))
+stroke$bmi <- as.numeric(stroke$bmi)
+#stroke$stroke <- as.factor(stroke$stroke)
+```
+```{r}
+str(stroke)
+```
+
+```{r}
+corrplot(cor(stroke))
+```
+```{r}
+boxplot(stroke[,-1])
+```
+
+
+
