@@ -1,0 +1,105 @@
+---
+title: "Predicting Stroke"
+author: "Stephen Kuc"
+date: '2022-06-14'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Importing dataset and necessary libraries
+```{r}
+stroke <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/healthcare-dataset-stroke-data.csv")
+```
+```{r}
+library(caret) # for training models
+library(e1071) 
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+```{r}
+str(stroke)
+```
+Many of the categorical variables are characters -- we will need to change those to factors. 
+```{r}
+dim(stroke)
+```
+
+There are 5110 observations, with 12 features, including the target variable.
+```{r}
+# changing datatypes to what they should be
+stroke$hypertension <- as.factor(stroke$hypertension)
+stroke$heart_disease <- as.factor(stroke$heart_disease)
+stroke$gender <- as.factor(stroke$gender)
+stroke$ever_married <- as.factor(stroke$ever_married)
+stroke$work_type <- as.factor(stroke$work_type)
+stroke$Residence_type <- as.factor(stroke$Residence_type)
+stroke$smoking_status <- as.factor(stroke$smoking_status)
+stroke$bmi <- as.numeric(stroke$bmi)
+stroke$stroke <- as.factor(stroke$stroke)
+```
+
+```{r}
+# checking nulls
+colSums(is.na(stroke))
+```
+There are 201 nulls in BMI. 
+```{r}
+summary(stroke)
+```
+1 "other" gender. 1544 "unknown" smoker status. 201 nulls in BMI. Work type "Private" means what? Any cutoff for minimum Age?
+Target variable Stroke seems pretty imbalanced.
+```{r}
+# plots for all features
+par(mar = c(2,2,2,2))
+layout.matrix <- matrix(c(1,4,5,6,2,7,8,9,3,10,0,0),nrow = 4, ncol = 3)
+
+layout(mat = layout.matrix,
+       heights = c(4, 4, 4, 4), 
+       widths = c(3, 3, 3))
+# histogram for numerical features
+hist(stroke$age, cex.main = .5, cex.axis = .5)
+hist(stroke$avg_glucose_level, cex.main = .5)
+hist(stroke$bmi, cex.main = .5)
+
+# bar charts for categorical
+countGen <- table(stroke$stroke,stroke$gender)
+barplot(countGen, main = "Stroke distribution by Gender", legend = rownames(countGen), cex.lab = .5, cex.main = .5)
+
+countHyp <- table(stroke$stroke, stroke$hypertension)
+barplot(countHyp, main = "Stroke distribution by Hypertension", legend = rownames(countHyp), cex.lab= .5, cex.main = .5)
+
+countHd <- table(stroke$stroke,stroke$heart_disease)
+barplot(countHd, main = "Stroke distribution by Heart Disease", legend = rownames(countHd), cex.lab = .5, cex.main = .5)
+
+countMarried <- table(stroke$stroke, stroke$ever_married)
+barplot(countMarried, main = "Stroke distribution by if ever married", legend = rownames(countMarried), cex.lab = .5, cex.main = .5)
+
+countWork <- table(stroke$stroke, stroke$work_type)
+barplot(countWork, main = "Stroke distribution by Work Type", legend = rownames(countWork), cex.lab = .5, cex.main = .5, cex.axis = .5)
+
+countRes <- table(stroke$stroke, stroke$Residence_type)
+barplot(countRes, main = "Stroke distribution by Residence Type", legend = rownames(countRes), cex.lab = .5, cex.main = .5)
+
+countSmoke <- table(stroke$stroke, stroke$smoking_status)
+barplot(countSmoke, main = "Stroke distribution by Smoking Status", legend = rownames(countSmoke), cex.lab = .5, cex.main = .5, cex.axis = .5)
+```
+```{r}
+# glucose levels look skewed slightly, as does bmi numbers
+# let's check for skewness
+skewness(stroke$avg_glucose_level)
+skewness(stroke$bmi) ## need to get rid of nulls to see skewness metric
+skewness(stroke$age)
+```
+```{r}
+# let's investigate the numeric variables further
+ggplot(stroke, aes(x=age,color=stroke)) + geom_histogram(bins = 20)
+
+ggplot(stroke, aes(x=avg_glucose_level,color=stroke)) + geom_histogram(bins = 20)
+
+ggplot(stroke, aes(x=bmi,color=stroke)) + geom_histogram(bins = 20)
+```
