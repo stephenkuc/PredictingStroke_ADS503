@@ -1,0 +1,114 @@
+---
+title: "503Project Models LDA, GLMN, and NSC"
+author: "Maha Jayapal"
+date: "6/8/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading the packages
+```{r}
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+stroke<- read.csv('c:\\maha\\503\\healthcare-dataset-stroke-data.csv', header = TRUE)
+```
+```{r}
+str(stroke)
+```
+```{r}
+stroke$gender <- as.numeric(as.factor(stroke$gender))
+stroke$ever_married <- as.numeric(as.factor(stroke$ever_married))
+stroke$work_type <- as.numeric(as.factor(stroke$work_type))
+stroke$Residence_type <- as.numeric(as.factor(stroke$Residence_type))
+stroke$smoking_status <- as.numeric(as.factor(stroke$smoking_status))
+stroke$bmi <- as.numeric(stroke$bmi)
+levels(stroke$stroke) <- c("YES", "NO")
+#stroke$stroke <- as.factor(stroke$stroke)
+```
+```{r}
+stroke$stroke<-ifelse(stroke$stroke == 1,"YES","NO")
+table(stroke$stroke)
+```
+```{r}
+trainingRows <- createDataPartition(stroke$stroke, p = .80, list = FALSE)
+stroke_train <- stroke[trainingRows, ]
+stroke_test <- stroke[-trainingRows, ]
+stroke_trainx <- stroke_train[,1:11]
+stroke_trainy <- as.factor(stroke_train[, 12])
+stroke_trainimp <- preProcess(stroke_trainx, "knnImpute")
+stroke_trainxpr <- predict(stroke_trainimp, stroke_trainx)
+stroke_testxpr <- predict(stroke_trainimp, stroke_test)
+```
+
+```{r}
+ctrl <- trainControl(method = "cv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE,
+                     savePredictions = TRUE)
+```
+```{r}
+set.seed(500)
+ldaFit_stroke <- train(x = stroke_trainxpr,
+                       y = stroke_trainy,
+                       method = "lda",
+                       preProc = c("center","scale"),
+                       metric = "ROC",
+                       trControl = ctrl)
+ldaFit_stroke
+```
+```{r}
+glmnGrid <- expand.grid(alpha = c(0, .1, .2, .4, .6, .8, 1),
+lambda = seq(.01, .2, length = 10))
+set.seed(500)
+glmnFit_stroke <- train(x = stroke_trainxpr,
+                     y = stroke_trainy,
+                     method = "glmnet",
+                     tuneGrid = glmnGrid,
+                     preProc = c("center", "scale"),
+                     metric = "ROC",
+                     trControl = ctrl)
+glmnFit_stroke
+```
+```{r}
+set.seed(500)
+nscFit_stroke <- train(x = stroke_trainxpr,
+                     y = stroke_trainy,
+                     method = "pam",
+                     preProc = c("center", "scale"),
+                     tuneGrid = data.frame(threshold = seq(0, 25, length = 30)),
+                     metric = "ROC",
+                     trControl = ctrl)
+nscFit_stroke
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

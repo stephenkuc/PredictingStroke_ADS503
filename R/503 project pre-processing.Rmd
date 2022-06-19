@@ -1,0 +1,80 @@
+---
+title: "503Project Preprocessing"
+author: "Maha Jayapal"
+date: "6/8/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading the packages
+```{r}
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+stroke<- read.csv('c:\\maha\\503\\healthcare-dataset-stroke-data.csv', header = TRUE)
+```
+```{r}
+str(stroke)
+```
+```{r}
+stroke$gender <- as.numeric(as.factor(stroke$gender))
+stroke$ever_married <- as.numeric(as.factor(stroke$ever_married))
+stroke$work_type <- as.numeric(as.factor(stroke$work_type))
+stroke$Residence_type <- as.numeric(as.factor(stroke$Residence_type))
+stroke$smoking_status <- as.numeric(as.factor(stroke$smoking_status))
+stroke$bmi <- as.numeric(stroke$bmi)
+levels(stroke$stroke) <- c("YES", "NO")
+#stroke$stroke <- as.factor(stroke$stroke)
+```
+```{r}
+stroke$stroke<-ifelse(stroke$stroke == 1,"YES","NO")
+table(stroke$stroke)
+```
+```{r}
+trainingRows <- createDataPartition(stroke$stroke, p = .80, list = FALSE)
+stroke_train <- stroke[trainingRows, ]
+stroke_test <- stroke[-trainingRows, ]
+stroke_trainx <- stroke_train[,1:11]
+stroke_trainy <- as.factor(stroke_train[, 12])
+stroke_trainimp <- preProcess(stroke_trainx, "knnImpute")
+stroke_trainxpr <- predict(stroke_trainimp, stroke_trainx)
+stroke_testxpr <- predict(stroke_trainimp, stroke_test)
+```
+```{r}
+sapply(stroke_trainxpr, function(x) sum(is.na(x)))
+dim(stroke_trainxpr)
+str(stroke_trainxpr)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
