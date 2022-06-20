@@ -1,0 +1,140 @@
+---
+title: "Predicting Stroke - PreProcessing"
+author: "Stephen Kuc"
+date: '2022-06-20'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+stroke <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/healthcare-dataset-stroke-data.csv")
+```
+```{r}
+library(caret) # for training models
+library(e1071) 
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+# changing datatypes to what they should be
+stroke$hypertension <- as.factor(stroke$hypertension)
+stroke$heart_disease <- as.factor(stroke$heart_disease)
+stroke$gender <- as.factor(stroke$gender)
+stroke$ever_married <- as.factor(stroke$ever_married)
+stroke$work_type <- as.factor(stroke$work_type)
+stroke$Residence_type <- as.factor(stroke$Residence_type)
+stroke$smoking_status <- as.factor(stroke$smoking_status)
+stroke$bmi <- as.numeric(stroke$bmi)
+stroke$stroke <- as.factor(stroke$stroke)
+```
+Getting rid of ID column, centering, scaling and imputing
+```{r}
+stroke <- subset(stroke,select = -c(id))
+stroke_imp <- preProcess(stroke,method = c("center", "scale", "knnImpute"))
+strokePp <- predict(stroke_imp, stroke)
+```
+
+Converting multi level factors into dummy variables to check correlations and save for models that need dummy variables
+```{r}
+# convert multi level factors into dummy variables
+strokeFact <- subset(strokePp, select = c(gender, work_type, Residence_type, smoking_status))
+strokeNon <- subset(strokePp,select = -c(gender,work_type, Residence_type, smoking_status))
+
+dmy <- dummyVars(" ~. ", data =strokeFact)
+strokeDum <- data.frame(predict(dmy,newdata=strokeFact))
+head(strokeDum)
+```
+```{r}
+# add back into dataframe with multi-level factors now as dummy variables
+
+strokeDummies <- cbind(strokeDum, strokeNon)
+head(strokeDummies)
+```
+Going to change the remaining binary factor variables (hypertension, heart_disease, and ever married) to numerical 1, 0 variables.
+```{r}
+strokeDummies$hypertension <- as.numeric(strokeDummies$hypertension)
+strokeDummies$heart_disease <- as.numeric(strokeDummies$heart_disease)
+strokeDummies$ever_married <- as.numeric(strokeDummies$ever_married)
+```
+
+```{r}
+par(mar=c(5,5,5,5)+0.1)
+
+# making stroke as numeric to plot correlation
+strokeDummies$stroke <- as.numeric(strokeDummies$stroke)
+
+corrplot(cor(strokeDummies), cl.cex= .5,tl.cex=.4)
+```
+
+
+removing nzv predictors and checking correlation again
+```{r}
+strokeVec <- subset(strokeDummies,select = c(stroke))
+strokeImpDum <- preProcess(strokeDummies,"nzv")
+strokeDummiesPp <- predict(strokeImpDum, strokeDummies)
+```
+We lost 3 variables here -- gender.Other, work_type.Never_worked, and stroke, which points out how unbalanced the data set is. 
+```{r}
+# add stroke back in
+strokeDummiesPp <- cbind(strokeDummiesPp, strokeVec)
+corrplot(cor(strokeDummiesPp), cl.cex= .5,tl.cex=.4)
+```
+Now that we've seen the correlation for each variable, we need to first get rid of any highly correlated features. Then, we need to minimize the dummy variables so we don't have any redundancy IE get rid of one gender (since we only have 2 now) as a 0 for one will imply the existence of the other and so on.
+First, to get rid of high correlation features using a cut-off of .8. 
+```{r}
+
+highCorr <- findCorrelation(cor(strokeDummiesPp), cutoff = .8) # find highly correlated predictors
+length(highCorr)
+filterDummiesPp <- strokeDummiesPp[,-highCorr]
+```
+
+```{r}
+colnames(filterDummiesPp)
+```
+In our filtered list of dummies, gender.male was eliminated and so was Residence_type.urban -- which took care of part of the other action item. Now, to get rid of one binary feature for the remaining multi-level features to reduce redunancy.
+```{r}
+filterDummiesPp <- subset(filterDummiesPp, select = -c(smoking_status.Unknown))
+```
+```{r}
+# changing stroke back to a factor and ensuring hypertension and heart disease are 0s and 1s
+filterDummiesPp$stroke <- as.numeric(as.factor(filterDummiesPp$stroke))
+filterDummiesPp$stroke <- ifelse(filterDummiesPp$stroke == 2, "YES","NO")
+filterDummiesPp$stroke <- as.factor(filterDummiesPp$stroke)
+filterDummiesPp$hypertension <- ifelse(filterDummiesPp$hypertension == 2, 1,0)
+filterDummiesPp$heart_disease <- ifelse(filterDummiesPp$heart_disease == 2, 1,0)
+filterDummiesPp$ever_married <- ifelse(filterDummiesPp$ever_married == 2, 1,0)
+```
+
+```{r}
+head(filterDummiesPp)
+```
+
+Now the data should be ready to model with - it is filtered, centered, scaled, dummified, and reduced of NZV.
+
+Let's split into train and test set
+
+```{r}
+
+trainingRows <- createDataPartition(filterDummiesPp$stroke, p=.8, list=FALSE)
+trainStroke <- filterDummiesPp[trainingRows,]
+
+testStroke <- filterDummiesPp[-trainingRows,]
+
+```
+
+```{r}
+summary(train$stroke)
+```
+
+There is that heavy imbalance in the training set, so let's balance this dataset. The simplest approach to counteracting the negative effects of class imbalance is to tune the model to maximize the accuracy of the minority class(es). We can do up-sampling or down-sampling, or we can do stratified, or even synthetic minority over-sampling (SMOTE).
+We will write the train and test sets to csv and start a new notebook for training
+```{r}
+write.csv(trainStroke,"c:/Users/steph/OneDrive/Documents/USD/ADS503/trainStroke.csv")
+write.csv(testStroke,"c:/Users/steph/OneDrive/Documents/USD/ADS503/testStroke.csv")
+```
