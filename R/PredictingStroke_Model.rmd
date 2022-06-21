@@ -1,0 +1,224 @@
+---
+title: "PredictingStroke_Modeling"
+author: "Stephen Kuc"
+date: '2022-06-20'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# uploading training and test sets
+train <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/trainStroke.csv")
+test <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/testStroke.csv")
+
+```
+```{r}
+# loading in necessary libraries
+library(caret) # for training models
+library(e1071) 
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+```{r}
+summary(train)
+```
+```{r}
+train <- subset(train, select = -c(X))
+test <- subset(test, select = -c(X))
+
+train$stroke <- as.factor(train$stroke)
+test$stroke <- as.factor(test$stroke)
+```
+```{r}
+trainX <- subset(train,select = -stroke)
+trainY <- train$stroke
+
+testX <- subset(test,select = -stroke)
+testY <- test$stroke
+
+```
+Let's create an oversampled training set
+```{r}
+set.seed(1103)
+trainOs <- upSample(x = trainX,y = trainY,yname = "stroke")
+
+dim(trainX)
+dim(trainOs)
+```
+Observations went from 4089 to 7778. Good to realize that we now have stroke back in the trainXOs set.
+
+```{r}
+trainXOs <- subset(trainOs, select = -c(stroke))
+trainYOs <- subset(trainOs, select = c(stroke))
+trainYOs$stroke <- as.factor(trainYOs$stroke)
+```
+
+Let's first model with stratified random sampling
+### Logistic Regression:
+With stratified sampling (Str for naming)
+```{r}
+# setting stratified random sampling ctrl variable
+ctrl <- trainControl(method="repeatedcv", 
+                       number = 10,
+                      repeats = 3,
+                       classProbs = T,
+                       summaryFunction = twoClassSummary,
+                     savePredictions = T)
+# logistic regression
+set.seed(101)
+lrStr <- train(x = trainX, y = trainY, 
+                method = "glm",
+                metric = "ROC",
+                trControl = ctrl)
+
+lrStr
+```
+With oversample (Os for naming)
+```{r}
+ctrlOs <- trainControl(method="cv", 
+                       number = 10,
+                       classProbs = T,
+                       summaryFunction = twoClassSummary,
+                     savePredictions = T)
+set.seed(101)
+lrOs <- train(x = trainXOs, y = trainYOs$stroke, 
+                method = "glm",
+                metric = "ROC",
+                trControl = ctrlOs)
+
+lrOs
+```
+### LDA:
+```{r}
+
+set.seed(102)
+
+# Str for stratified, Up for up-sampled
+ldaStr <- train(x = trainX, y = trainY, 
+                method = "lda",
+                metric = "ROC",
+                trControl = ctrl)
+
+ldaStr
+```
+```{r}
+ldaStr$finalModel
+```
+```{r}
+#  model with oversampled training data
+ldaOs <- train(x = trainXOs, y = trainYOs$stroke, 
+                method = "lda",
+                metric = "ROC",
+                trControl = ctrlOs)
+
+ldaOs
+
+```
+
+
+### Penalized Logistic Regression
+```{r}
+# tuning parameter
+glmnGrid <- expand.grid(alpha = c(0,.1, .2, .4, .6, .8, 1))
+lambda <- seq(.01,.2,length = 10)
+# Str for stratified, Os for OverSampled
+glmnStr <- train(x = trainX, y = trainY, 
+                method = "glmnet",
+                tunGrid = glmnGrid,
+                metric = "ROC",
+                trControl = ctrl)
+
+glmnStr
+```
+```{r}
+# Str for stratified, Os for OverSampled
+glmnOs <- train(x = trainXOs, y = trainYOs$stroke, 
+                method = "glmnet",
+                tunGrid = glmnGrid,
+                metric = "ROC",
+                trControl = ctrlOs)
+
+glmnOs
+```
+### Nearest Shrunken Centroid
+```{r}
+
+set.seed(101)
+nscStr <- train(x = trainX, y = trainY, 
+                method = "pam",
+                tuneGrid = data.frame(threshold = seq(0,25,30)),
+                metric = "ROC",
+                trControl = ctrl)
+
+nscStr
+```
+```{r}
+set.seed(101)
+nscOs <- train(x = trainXOs, y = trainYOs$stroke, 
+                method = "pam",
+                tuneGrid = data.frame(threshold = seq(0,25,30)),
+                metric = "ROC",
+                trControl = ctrlOs)
+
+nscOs
+```
+# MDA
+```{r}
+# stratified sampling
+
+mdaStr <- train(x = trainX, y = trainY, 
+                method = "mda",
+                tuneGrid = expand.grid(.subclasses = 1:6),
+                metric = "ROC",
+                trControl = ctrl)
+mdaStr
+```
+```{r}
+mdaOs <- train(x = trainXOs , y = trainYOs$stroke, 
+                method = "mda",
+                tuneGrid = expand.grid(.subclasses = 1:6),
+                metric = "ROC",
+                trControl = ctrlOs)
+mdaOs
+```
+Neural Networks:
+```{r}
+# setting hyperparameters to tune over
+nnetGrid <- expand.grid(.size = 1:10, .decay = c(0, .1, 1, 2))
+maxSize <- max(nnetGrid$.size)
+numWts <- 1*(maxSize * (length(trainOs) + 1) + maxSize + 1)
+set.seed(101)
+# training w/ stratified random sampling
+
+nnetStr <- train(x = trainX , y = trainY, 
+                method = "nnet",
+                tuneGrid = nnetGrid,
+                preProc = c("spatialSign"),
+                metric = "ROC",
+                trace = FALSE,
+                maxit = 100,
+                maxNWts = numWts,
+                trControl = ctrl)
+
+nnetStr
+```
+
+```{r}
+nnetOs <- train(x = trainXOs , y = trainYOs, 
+                method = "nnet",
+                tuneGrid = nnetGrid,
+                preProc = c("spatialSign"),
+                metric = "ROC",
+                trace = FALSE,
+                maxit = 100,
+                maxNWts = numWts,
+                trControl = ctrlOs)
+
+nnetOs
+```
+
