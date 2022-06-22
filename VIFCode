@@ -1,0 +1,23 @@
+```{r}
+lrImpStr <- varImp(lrStr,scale=FALSE)
+
+lrImpOs <- varImp(lrOs,scale=FALSE)
+
+glmnImpStr <- varImp(glmnStr, scale = FALSE)
+glmnImpOs <- varImp(glmnOs,scale=FALSE)
+
+nscImpStr <- varImp(nscStr, scale = FALSE)
+nscImpOs <- varImp(nscOs,scale=FALSE)
+
+
+
+plot(lrImpStr, top = 10, main = "Logistic Regression, Stratified sampling, Feature Importance Values")
+plot(lrImpOs, top = 10, main = "Logistic Regression, Oversampling, Feature Importance Values")
+
+plot(glmnImpStr, top = 10, main = "Penalizied Logistic Regression, Stratified sampling, Feature Importance Values")
+plot(glmnImpOs, top = 10, main = "Penalizied Logistic Regression, Oversampling, Feature Importance Values")
+
+plot(nscImpStr, top = 10, main = "Nearest Shrunken Centroid, Stratified sampling, Feature Importance Values")
+plot(nscImpOs, top = 10, main = "Nearest Shrunken Centroid, Oversampling, Feature Importance Values")
+
+```
