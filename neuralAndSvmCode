@@ -1,0 +1,41 @@
+```{r}
+library(e1071)
+library(nnet)
+# basic neural network, untuned
+nnetOsSim <- nnet(stroke ~.,data=trainOs,size = 3, decay = .1)
+nnetOsSim
+```
+```{r}
+# setting hyperparameters to tune over
+nnCtrl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           repeats = 5, 
+                           classProbs = TRUE, 
+                           summaryFunction = twoClassSummary)
+nnetGrid <- expand.grid(size = seq(1,10,1), decay = seq(.1,.5,.1))
+
+set.seed(101)
+# training w/ oversampling
+
+nnetOs <- train(stroke ~., data = trainOs,
+                method = "nnet",
+                metric = "ROC",
+                verbose  = FALSE,
+                tuneGrid = nnetGrid,
+                maxit = 10,
+                MaxNWts = 5 * (ncol(trainOs) + 1) + 5 + 1,
+                trControl = nnCtrl)
+
+nnetOs
+```
+```{r}
+library(kernlab)
+
+svmROs = tune(svm, stroke ~ ., 
+             data = trainOs,
+             ranges = list(gamma = 2^(-1:2), cost = 2^(2:4)),
+             tunecontrol = tune.control(sampling = "fix"),
+             type = 'C-classification',
+             kernel = 'radial')
+svmROs
+```
