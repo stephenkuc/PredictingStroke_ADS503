@@ -1,0 +1,14 @@
+```{r}
+bar2 <- ggplot(data=stroke, aes(x = heart_disease,fill = stroke)) + geom_bar(position = "fill")+ ggtitle("Distribution of Heart Disease by Class") + xlab("Heart Disease") + ylab("Relative Frequency") + scale_fill_discrete(name = "Stroke")
+bar2
+bar3 <- ggplot(data=stroke, aes(x = hypertension,fill = stroke)) + geom_bar(position = "fill")+ ggtitle("Relative Frequencies of Hypertension with Stroke") + xlab("HyperTension") + ylab("Relative Frequency") + scale_fill_discrete(name = "Stroke")
+bar3
+bar2 <- ggplot(data=stroke, aes(x = heart_disease,fill = stroke)) + geom_bar(position = "fill")+ ggtitle("Relative Frequency of Heart Disease with Stroke") + xlab("Heart Disease") + ylab("Relative Frequency") + scale_fill_discrete(name = "Stroke")
+bar2
+bar4 <- ggplot(data=stroke, aes(x = smoking_status,fill = stroke)) + geom_bar(position = "fill")+ ggtitle("Relative Frequency of smoking status with Stroke") + xlab("Smoking Status") + ylab("Relative Frequency") + scale_fill_discrete(name = "Stroke")
+ bar4
+bar5 <- ggplot(data=stroke, aes(x = ever_married,fill = stroke)) + geom_bar(position = "fill")+ ggtitle("Relative Frequency of ever married status with Stroke") + xlab("Ever Married?") + ylab("Relative Frequency") + scale_fill_discrete(name = "Stroke")
+bar5
+bar6 <- ggplot(data=stroke, aes(x = Residence_Type,fill = stroke)) + geom_bar(position = "fill")+ ggtitle("Relative Frequency of residence type with Stroke") + xlab("Residence Type") + ylab("Relative Frequency") + scale_fill_discrete(name = "Stroke")
+bar6
+```
