@@ -1,0 +1,253 @@
+---
+title: "Untitled"
+author: '"Saba_Alemayehu"'
+date: "6/20/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+# Exploratory Data Analysis
+
+```{r}
+d98<- read.csv("healthcare-dataset-stroke-data.csv")
+str(d98)
+```
+
+
+
+```{r}
+colnames(d98)
+```
+```{r}
+str(d98)
+
+```
+
+```{r}
+summary(d98)
+```
+
+```{r}
+head(d98)
+
+```
+
+```{r}
+tail(d98)
+
+```
+
+```{r}
+apply(d98,2,class)
+```
+
+
+
+
+# encoding the variables into numeric and factors
+```{r}
+
+d98$bmi <- as.numeric(d98$bmi)
+d98$gender <- as.factor(d98$gender)
+d98$work_type<-as.factor(d98$work_type)
+d98$ever_married <- as.factor(d98$ever_married)
+d98$Residence_type <- as.factor(d98$Residence_type)
+d98$smoking_status <- as.factor(d98$smoking_status)
+
+```
+
+```{r}
+str(d98)
+```
+
+```{r}
+table(d98$stroke)
+```
+
+
+```{r}
+#table(stroke_dt$hypertension)
+```
+
+```{r}
+#table(stroke_dt$heart_disease)
+```
+
+```{r}
+#table(stroke_dt$ever_married)
+```
+
+```{r}
+#table(stroke_dt$Residence_type)
+```
+
+```{r}
+#table(stroke_dt$smoking_status)
+```
+
+```{r}
+#table(stroke_dt$stroke)
+```
+# Data Visualization
+```{r}
+# histogram of numeric variables
+#par(mfrow=c(1,3))
+#hist( stroke_dt$age ) 
+#hist( stroke_dt$bmi )
+#hist( stroke_dt$avg_glucose_level )
+```
+# Class Imbalance
+```{r}
+#barplot(prop.table(table(stroke_dt1$stroke)),
+ #       col = rainbow(2),
+  #      ylim = c(0, 1),
+   #     main = "Class Distribution")
+```
+# convert factors into dummy variables
+
+```{r}
+#create dummy variable 
+dummy_var1<-dummyVars(~gender+ever_married + work_type+ Residence_type+smoking_status, data=d98,fullRank = T)
+
+dummy_df1<-data.frame(predict(dummy_var1,d98))
+head(dummy_df1)
+
+
+# combine origional data and dummy data frame
+
+combinedDf<-cbind(dummy_df1,d98)
+head(combinedDf)
+
+
+# remove the redundunt column
+
+stroke_dm <-dplyr::select(combinedDf, -c('gender', 
+                                         'ever_married',
+                                         'work_type',
+                                         'Residence_type', 
+                                         'smoking_status'))
+                                         
+                                            
+                                           
+                                           
+                                           
+
+#head(stroke_dm)
+
+str(stroke_dm)
+
+```
+# Data Spliting and data preprocessing
+
+```{r}
+#stroke_dm$hypertension <- as.numeric(stroke_dm$hypertension)
+#stroke_dm$heart_disease <- as.numeric(stroke_dm$heart_disease)
+#stroke_dm$ever_married <- as.numeric(stroke_dm$ever_married)
+#stroke_dm$stroke<-ifelse(stroke_dm$stroke ==1,'yes','no')
+
+
+
+stroke_dm$stroke <- ifelse(stroke_dm$stroke == 2, "YES","NO")
+stroke_dm$stroke <- as.factor(stroke_dm$stroke)
+stroke_dm$hypertension <- ifelse(stroke_dm$hypertension == 2, 1,0)
+stroke_dm$heart_disease <- ifelse(stroke_dm$heart_disease == 2, 1,0)
+stroke_dm$ever_married <- ifelse(stroke_dm$ever_married == 2, 1,0)
+
+
+
+
+
+
+
+table(stroke_dm$stroke)
+```
+```{r}
+stroke_dm = subset(stroke_dm, select = -c(id) )
+stroke_dm$stroke<-as.factor(stroke_dm$stroke)
+str(stroke_dm)
+```
+
+```{r}
+head(stroke_dm)
+table(stroke_dm$stroke)
+```
+
+
+#Data partitioning
+```{r}
+pre_heni = subset(stroke_dm, select = -c(stroke) )
+pre_heni
+res_heni<-stroke_dm$stroke
+
+
+set.seed(100)
+training_rowSt1<-createDataPartition(res_heni, p=0.8, list=FALSE)
+strok_prTrainX2<-pre_heni[training_rowSt1,]
+strok_prTestX1<-pre_heni[-training_rowSt1,]
+
+
+stroke_reTrY1<-res_heni[training_rowSt1]
+stroke_reTesY1<-res_heni[-training_rowSt1]
+str(stroke_reTrY1)
+
+```
+
+# Impute the missing value
+```{r}
+trainimpu1<-preProcess(strok_prTrainX2,"knnImpute")
+strokeTrprX<-predict(trainimpu1,strok_prTrainX2)
+strok_prTrainX2
+trainimpu1
+strokeTeprX<-predict(trainimpu1,strok_prTestX1)
+#str(strokeTeprX)
+
+```
+
+
+```{r}
+levels(strokeTrprX$gender)
+```
+
+# Develop a model
+
+```{r}
+#library(caret)
+#library(pROC)
+
+#Logistic Regression
+ctrl<-trainControl(method="LGOCV",
+                   summaryFunction=twoClassSummary,
+                   classProbs = TRUE,
+                   savePredictions = TRUE)
+                
+                   
+                   
+                  
+set.seed(300)
+lrSfit<-train(x=strokeTrprX, y=stroke_reTrY1,
+             method = "glm",
+             metric="ROC",
+             preProcess = c("center","scale"),
+             trControl=ctrl)
+
+lrSfit
+```
+
+
+
+
+
+
+
+
+

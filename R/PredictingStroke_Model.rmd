@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # uploading training and test sets
 train <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/trainStroke.csv")
 test <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/testStroke.csv")
+trainOs <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/trainStrokeOs.csv")
 
 ```
 ```{r}
@@ -28,34 +29,9 @@ library(pROC)
 summary(train)
 ```
 ```{r}
-train <- subset(train, select = -c(X))
-test <- subset(test, select = -c(X))
-
 train$stroke <- as.factor(train$stroke)
 test$stroke <- as.factor(test$stroke)
-```
-```{r}
-trainX <- subset(train,select = -stroke)
-trainY <- train$stroke
-
-testX <- subset(test,select = -stroke)
-testY <- test$stroke
-
-```
-Let's create an oversampled training set
-```{r}
-set.seed(1103)
-trainOs <- upSample(x = trainX,y = trainY,yname = "stroke")
-
-dim(trainX)
-dim(trainOs)
-```
-Observations went from 4089 to 7778. Good to realize that we now have stroke back in the trainXOs set.
-
-```{r}
-trainXOs <- subset(trainOs, select = -c(stroke))
-trainYOs <- subset(trainOs, select = c(stroke))
-trainYOs$stroke <- as.factor(trainYOs$stroke)
+trainOs$stroke <- as.factor(trainOs$stroke)
 ```
 
 Let's first model with stratified random sampling
@@ -71,7 +47,7 @@ ctrl <- trainControl(method="repeatedcv",
                      savePredictions = T)
 # logistic regression
 set.seed(101)
-lrStr <- train(x = trainX, y = trainY, 
+lrStr <- train(stroke ~., data = train, 
                 method = "glm",
                 metric = "ROC",
                 trControl = ctrl)
@@ -86,7 +62,7 @@ ctrlOs <- trainControl(method="cv",
                        summaryFunction = twoClassSummary,
                      savePredictions = T)
 set.seed(101)
-lrOs <- train(x = trainXOs, y = trainYOs$stroke, 
+lrOs <- train(stroke ~., data = trainOs, 
                 method = "glm",
                 metric = "ROC",
                 trControl = ctrlOs)
@@ -99,7 +75,7 @@ lrOs
 set.seed(102)
 
 # Str for stratified, Up for up-sampled
-ldaStr <- train(x = trainX, y = trainY, 
+ldaStr <- train(stroke ~., data = train, 
                 method = "lda",
                 metric = "ROC",
                 trControl = ctrl)
@@ -111,7 +87,7 @@ ldaStr$finalModel
 ```
 ```{r}
 #  model with oversampled training data
-ldaOs <- train(x = trainXOs, y = trainYOs$stroke, 
+ldaOs <- train(stroke ~., data = trainOs, 
                 method = "lda",
                 metric = "ROC",
                 trControl = ctrlOs)
@@ -209,7 +185,7 @@ nnetStr
 ```
 
 ```{r}
-nnetOs <- train(x = trainXOs , y = trainYOs, 
+nnetOs <- train(x = trainXOs , y = trainYOs$stroke, 
                 method = "nnet",
                 tuneGrid = nnetGrid,
                 preProc = c("spatialSign"),
@@ -222,3 +198,62 @@ nnetOs <- train(x = trainXOs , y = trainYOs,
 nnetOs
 ```
 
+### Support Vector Machine
+```{r}
+library(kernlab)
+library('e1071')
+
+
+svmStr = tune(svm, stroke ~ ., 
+             data = train,
+             ranges = list(gamma = 2^(-1:2), cost = 2^(2:4)),
+             tunecontrol = tune.control(nrepeat = 10, sampling = "cross",cross = 10),
+             type = 'C-classification',
+             kernel = 'radial')
+svmStr
+```
+```{r}
+set.seed(101)
+sigmaRangeReduced <- sigest(as.matrix(trainX))
+svmRGridReduced <- expand.grid(.sigma = sigmaRangeReduced[1],
+                               .C = 2^(seq(-4,4,)))
+
+
+set.seed(102)
+svmRStr <- train(x = trainX , y = trainY, 
+                method = "svmRadial",
+                tuneLength = 15,
+                metric = "ROC",
+                fit = FALSE,
+                trControl = ctrl)
+
+svmRStr
+
+```
+
+```{r}
+svmGrid <- expand.grid(degree = 1:2, scale = c(0.01,.005,.001),C = 2^(-2:5))
+
+
+set.seed(102)
+svmROs <- train(x = trainXOs , y = trainYOs$stroke, 
+                method = "svmRadial",
+                tuneGrid = svmGrid,
+                metric = "ROC",
+                fit = FALSE,
+                trControl = ctrlOs)
+
+svmROs
+```
+
+```{r}
+svmGrid <- expand.grid(degree = 1:2, scale = c(0.01,.005,.001),C = 2^(-2:5))
+
+set.seed(100)
+svmPStr <- train(stroke ~., train,
+                 method = "svmPoly",
+                 tuneGrid = svmGrid,
+                 trControl = ctrl)
+
+
+```
