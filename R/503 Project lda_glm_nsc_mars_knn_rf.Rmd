@@ -1,0 +1,263 @@
+---
+title: "503Project Preprocessing"
+author: "Maha Jayapal"
+date: "6/21/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading the packages
+```{r}
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+stroke<- read.csv('c:\\maha\\503\\healthcare-dataset-stroke-data.csv', header = TRUE)
+```
+```{r}
+str(stroke)
+```
+```{r}
+stroke$gender <- as.numeric(as.factor(stroke$gender))
+stroke$ever_married <- as.numeric(as.factor(stroke$ever_married))
+stroke$work_type <- as.numeric(as.factor(stroke$work_type))
+stroke$Residence_type <- as.numeric(as.factor(stroke$Residence_type))
+stroke$smoking_status <- as.numeric(as.factor(stroke$smoking_status))
+stroke$bmi <- as.numeric(stroke$bmi)
+levels(stroke$stroke) <- c("YES", "NO")
+#stroke$stroke <- as.factor(stroke$stroke)
+```
+```{r}
+stroke$stroke<-ifelse(stroke$stroke == 1,"YES","NO")
+table(stroke$stroke)
+```
+```{r}
+trainingRows <- createDataPartition(stroke$stroke, p = .80, list = FALSE)
+stroke_train <- stroke[trainingRows, ]
+stroke_test <- stroke[-trainingRows, ]
+stroke_trainx <- stroke_train[,1:11]
+stroke_trainy <- as.factor(stroke_train[, 12])
+stroke_trainimp <- preProcess(stroke_trainx, "knnImpute")
+stroke_trainxpr <- predict(stroke_trainimp, stroke_trainx)
+stroke_testxpr <- predict(stroke_trainimp, stroke_test)
+```
+```{r}
+sapply(stroke_trainxpr, function(x) sum(is.na(x)))
+dim(stroke_trainxpr)
+str(stroke_trainxpr)
+```
+```{r}
+ctrl <- trainControl(method = "cv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE,
+                     savePredictions = TRUE)
+```
+```{r}
+set.seed(500)
+ldaFit_stroke <- train(x = stroke_trainxpr,
+                       y = stroke_trainy,
+                       method = "lda",
+                       preProc = c("center","scale"),
+                       metric = "ROC",
+                       trControl = ctrl)
+ldaFit_stroke
+```
+```{r}
+glmnGrid <- expand.grid(alpha = c(0, .1, .2, .4, .6, .8, 1),
+                        lambda = seq(.01, .2, length = 10))
+set.seed(500)
+glmnFit_stroke <- train(x = stroke_trainxpr,
+                        y = stroke_trainy,
+                        method = "glmnet",
+                        tuneGrid = glmnGrid,
+                        preProc = c("center", "scale"),
+                        metric = "ROC",
+                        trControl = ctrl)
+glmnFit_stroke
+```
+```{r}
+set.seed(500)
+nscFit_stroke <- train(x = stroke_trainxpr,
+                       y = stroke_trainy,
+                       method = "pam",
+                       preProc = c("center", "scale"),
+                       tuneGrid = data.frame(threshold = seq(0, 25, length = 30)),
+                       metric = "ROC",
+                       trControl = ctrl)
+nscFit_stroke
+```
+```{r}
+set.seed(500)
+marsTune_stroke <- train(x = stroke_trainxpr, y = stroke_trainy,
+                         method = "earth",
+                         tuneGrid = expand.grid(degree = 1, nprune = 2:38),
+                         trControl = ctrl)
+marsTune_stroke
+marsTune_stroke$finalModel
+```
+```{r}
+set.seed(500)
+svmRTune_stroke <- train(x = stroke_trainxpr, y = stroke_trainy,
+                         method = "svmRadial",
+                         preProc = c("center", "scale"),
+                         tuneLength = 14,
+                         trControl = ctrl)
+svmRTune_stroke
+```
+```{r}
+svmGrid <- expand.grid(degree = 1:2, scale = c(0.01, 0.005, 0.001), C = 2^(-2:5))
+
+set.seed(500)
+#options(warn=-1)
+svmPTune_stroke <- train(x = stroke_trainxpr, y = stroke_trainy,
+                         method = "svmPoly",
+                         preProc = c("center", "scale"),
+                         scale = TRUE,
+                         tuneGrid = svmGrid,
+                         trControl = ctrl)
+svmPTune_stroke
+```
+```{r}
+set.seed(500)
+knnTune_stroke <- train(x = stroke_trainxpr, y = stroke_trainy,
+                        method = "knn",
+                        preProc = c("center", "scale"),
+                        tuneGrid = data.frame(k = 1:100),
+                        trControl = ctrl)
+knnTune_stroke
+```
+```{r}
+mtryGrid <- data.frame(mtry = floor(seq(10, ncol(stroke_trainxpr)/3, length = 10)))
+
+set.seed(500)
+rfTune_stroke <- train(x = stroke_trainxpr, y = stroke_trainy,
+                method = "rf",
+                tuneGrid = mtryGrid,
+                ntree = 500,
+                importance = TRUE,
+                trControl = ctrl)
+rfTune_stroke
+```
+```{r}
+nb_stroke <- naiveBayes(stroke ~ ., data = stroke_train)
+nb_stroke
+```
+```{r}
+testResults <- data.frame(OBS = stroke_testy, LDA = predict(ldaFit_stroke, stroke_testxpr))
+testResults$GLMN <- predict(glmnFit_stroke, stroke_testxpr)
+testResults$NSC <- predict(nscFit_stroke, stroke_testxpr)
+testResults$Mars_tune <- predict(marsTune_stroke, stroke_testxpr)
+testResults$SVMRadial <- predict(svmRTune_stroke, stroke_testxpr)
+testResults$SVMPoly <- predict(svmPTune_stroke, stroke_testxpr)
+testResults$KNN <- predict(knnTune_stroke, stroke_testxpr)
+testResults$RF <- predict(rfTune_stroke, stroke_testxpr)
+#testResults$NB <- predict(nb_stroke, stroke_testxpr)
+testResults$NB <- predict(nb_stroke, newdata = stroke_testxpr)
+```
+```{r}
+table(testResults$OBS == testResults$LDA)
+table(testResults$OBS == testResults$GLMN)
+table(testResults$OBS == testResults$NSC)
+table(testResults$OBS == testResults$Mars_tune)
+table(testResults$OBS == testResults$SVMRadial)
+table(testResults$OBS == testResults$SVMPoly)
+table(testResults$OBS == testResults$KNN)
+table(testResults$OBS == testResults$RF)
+table(testResults$OBS == testResults$NB)
+```
+
+```{r}
+ldaCM <- confusionMatrix(ldaFit_stroke, norm = "none")
+ldaCM
+```
+```{r}
+glmCM <- confusionMatrix(glmnFit_stroke, norm = "none")
+glmCM
+```
+```{r}
+nscCM <- confusionMatrix(nscFit_stroke, norm = "none")
+nscCM
+```
+
+```{r}
+marsCM <- confusionMatrix(marsTune_stroke, norm = "none")
+marsCM
+```
+```{r}
+knnCM <- confusionMatrix(knnTune_stroke, norm = "none")
+knnCM
+```
+```{r}
+rfCM <- confusionMatrix(rfTune_stroke, norm = "none")
+rfCM
+```
+```{r}
+nbCM <- confusionMatrix(nb_stroke, norm = "none")
+nbCM
+```
+```{r}
+ldaRoc <- roc(response = ldaFit_stroke$pred$obs,
+              predictor = ldaFit_stroke$pred$YES,
+              levels = rev(levels(ldaFit_stroke$pred$obs)))
+glmRoc <- roc(response = glmnFit_stroke$pred$obs,
+              predictor = glmnFit_stroke$pred$YES,
+              levels = rev(levels(glmnFit_stroke$pred$obs)))
+nscRoc <- roc(response = nscFit_stroke$pred$obs,
+              predictor = nscFit_stroke$pred$YES,
+              levels = rev(levels(nscFit_stroke$pred$obs)))
+marsRoc <- roc(response = marsTune_stroke$pred$obs,
+               predictor = marsTune_stroke$pred$YES,
+               levels = rev(levels(marsTune_stroke$pred$obs)))
+knnRoc <- roc(response = knnTune_stroke$pred$obs,
+              predictor = knnTune_stroke$pred$YES,
+              levels = rev(levels(knnTune_stroke$pred$obs)))
+rfRoc <- roc(response = rfTune_stroke$pred$obs,
+             predictor = rfTune_stroke$pred$YES,
+             levels = rev(levels(rfTune_stroke$pred$obs)))
+```
+```{r}
+plot(ldaRoc, type = "s", col = 'red', legacy.axes = TRUE)
+plot(glmRoc, type = "s", add = TRUE, col = 'green', legacy.axes = TRUE)
+plot(nscRoc, type = "s", add = TRUE, col = 'blue', legacy.axes = TRUE)
+plot(marsRoc, type = "s", add = TRUE, col = 'yellow', legacy.axes = TRUE)
+plot(knnRoc, type ="s", add =TRUE, col = 'pink', legacy.axes = TRUE)
+plot(rfRoc, type = "s", add= TRUE, legacy.axes = TRUE)
+legend("bottomright", legend=c("LDA", "GLMNET", "NSC", "MARS","KNN","RF"),
+col=c("red", "green","blue","yellow","pink", "black"), lwd=2)
+title(main = "Compare ROC curves from different models", outer = TRUE)
+```
+
+```{r}
+nbRoc <- roc(response = nb_stroke$pred$obs,
+             predictor = nb_stroke$pred$YES,
+             levels = rev(levels(nb_stroke$pred$obs)))
+plot(nbRoc)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
