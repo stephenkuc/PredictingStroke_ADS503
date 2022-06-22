@@ -22,7 +22,6 @@ nnetOs <- train(stroke ~., data = trainOs,
                 metric = "ROC",
                 verbose  = FALSE,
                 tuneGrid = nnetGrid,
-                maxit = 10,
                 MaxNWts = 5 * (ncol(trainOs) + 1) + 5 + 1,
                 trControl = nnCtrl)
 
