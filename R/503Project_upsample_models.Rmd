@@ -1,0 +1,250 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r}
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+stroke<- read.csv('c:\\maha\\503\\healthcare-dataset-stroke-data.csv', header = TRUE)
+```
+```{r}
+stroke$gender <- as.numeric(as.factor(stroke$gender))
+stroke$ever_married <- as.numeric(as.factor(stroke$ever_married))
+stroke$work_type <- as.numeric(as.factor(stroke$work_type))
+stroke$Residence_type <- as.numeric(as.factor(stroke$Residence_type))
+stroke$smoking_status <- as.numeric(as.factor(stroke$smoking_status))
+stroke$bmi <- as.numeric(stroke$bmi)
+levels(stroke$stroke) <- c("YES", "NO")
+#stroke$stroke <- as.factor(stroke$stroke)
+```
+```{r}
+stroke$stroke<-ifelse(stroke$stroke == 1,"YES","NO")
+table(stroke$stroke)
+```
+```{r}
+trainingRows <- createDataPartition(stroke$stroke, p = .80, list = FALSE)
+stroke_train <- stroke[trainingRows, ]
+stroke_test <- stroke[-trainingRows, ]
+stroke_trainup <- stroke_train
+stroke_trainup$stroke <- as.factor(stroke_train$stroke)
+trainup<-upSample(x=stroke_trainup[,-ncol(stroke_trainup)],
+                  y=stroke_trainup$stroke)
+trainup$stroke <- trainup$Class
+trainup <- trainup[,-12]
+
+stroke_trainupx <- trainup[,1:11]
+stroke_trainupy <- (trainup[, 12])
+stroke_trainimp <- preProcess(stroke_trainupx, "knnImpute")
+stroke_trainupxpr <- predict(stroke_trainimp, stroke_trainupx)
+stroke_testxpr <- predict(stroke_trainimp, stroke_test)
+```
+```{r}
+sapply(stroke_trainupxpr, function(x) sum(is.na(x)))
+dim(stroke_trainupxpr)
+str(stroke_trainupxpr)
+table(stroke_trainupy)
+```
+```{r}
+stroke_trainupy<-ifelse(stroke_trainupy == 1,"YES","NO")
+table(stroke_trainupy)
+```
+```{r}
+ctrl <- trainControl(method = "cv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE,
+                     savePredictions = TRUE)
+```
+```{r}
+set.seed(600)
+lda_up_stroke <- train(x = stroke_trainupxpr,
+                       y = stroke_trainupy,
+                       method = "lda",
+                       preProc = c("center","scale"),
+                       metric = "ROC",
+                       trControl = ctrl)
+lda_up_stroke
+```
+```{r}
+glmnGrid <- expand.grid(alpha = c(0, .1, .2, .4, .6, .8, 1),
+                        lambda = seq(.01, .2, length = 10))
+set.seed(600)
+glmn_up_stroke <- train(x = stroke_trainupxpr,
+                        y = stroke_trainupy,
+                        method = "glmnet",
+                        tuneGrid = glmnGrid,
+                        preProc = c("center", "scale"),
+                        metric = "ROC",
+                        trControl = ctrl)
+glmn_up_stroke
+```
+```{r}
+set.seed(600)
+nsc_up_stroke <- train(x = stroke_trainupxpr,
+                       y = stroke_trainupy,
+                       method = "pam",
+                       preProc = c("center", "scale"),
+                       tuneGrid = data.frame(threshold = seq(0, 25, length = 30)),
+                       metric = "ROC",
+                       trControl = ctrl)
+nsc_up_stroke
+```
+```{r}
+set.seed(600)
+mars_up_stroke <- train(x = stroke_trainupxpr, y = stroke_trainupy,
+                         method = "earth",
+                         tuneGrid = expand.grid(degree = 1, nprune = 2:38),
+                         trControl = ctrl)
+mars_up_stroke
+mars_up_stroke$finalModel
+```
+```{r}
+set.seed(600)
+svmR_up_stroke <- train(x = stroke_trainupxpr, y = stroke_trainupy,
+                         method = "svmRadial",
+                         preProc = c("center", "scale"),
+                         tuneLength = 14,
+                         trControl = ctrl)
+svmR_up_stroke
+```
+```{r}
+svmGrid <- expand.grid(degree = 1:2, scale = c(0.01, 0.005, 0.001), C = 2^(-2:5))
+
+set.seed(600)
+#options(warn=-1)
+svmP_up_stroke <- train(x = stroke_trainupxpr, y = stroke_trainupy,
+                         method = "svmPoly",
+                         preProc = c("center", "scale"),
+                         scale = TRUE,
+                         tuneGrid = svmGrid,
+                         trControl = ctrl)
+svmP_up_stroke
+```
+```{r}
+set.seed(600)
+knn_up_stroke <- train(x = stroke_trainupxpr, y = stroke_trainupy,
+                        method = "knn",
+                        preProc = c("center", "scale"),
+                        tuneGrid = data.frame(k = 1:100),
+                        trControl = ctrl)
+knn_up_stroke
+```
+```{r}
+mtryGrid <- data.frame(mtry = floor(seq(10, ncol(stroke_trainupxpr)/3, length = 10)))
+
+set.seed(600)
+rf_up_stroke <- train(x = stroke_trainupxpr, y = stroke_trainupy,
+                method = "rf",
+                tuneGrid = mtryGrid,
+                ntree = 500,
+                importance = TRUE,
+                trControl = ctrl)
+rf_up_stroke
+```
+```{r}
+head(stroke_testxpr)
+dim(stroke_testxpr)
+stroke_testXpr <- stroke_testxpr[, -12]
+stroke_testy <- stroke_testxpr[,12]
+```
+```{r}
+stroke_testy <-ifelse(stroke_testy == 1,"YES","NO")
+table(stroke_testy)
+```
+```{r}
+testResults <- data.frame(OBS = stroke_testy, LDA = predict(lda_up_stroke, stroke_testXpr))
+testResults$GLMN <- predict(glmn_up_stroke, stroke_testXpr)
+testResults$NSC <- predict(nsc_up_stroke, stroke_testXpr)
+testResults$Mars_tune <- predict(mars_up_stroke, stroke_testXpr)
+testResults$SVMRadial <- predict(svmR_up_stroke, stroke_testXpr)
+testResults$SVMPoly <- predict(svmP_up_stroke, stroke_testXpr)
+testResults$KNN <- predict(knn_up_stroke, stroke_testXpr)
+testResults$RF <- predict(rf_up_stroke, stroke_testXpr)
+#testResults$NB <- predict(nb_stroke, stroke_testxpr)
+#testResults$NB <- predict(nb_stroke, newdata = stroke_testxpr)
+```
+```{r}
+table(testResults$OBS == testResults$LDA)
+table(testResults$OBS == testResults$GLMN)
+table(testResults$OBS == testResults$NSC)
+table(testResults$OBS == testResults$Mars_tune)
+table(testResults$OBS == testResults$SVMRadial)
+table(testResults$OBS == testResults$SVMPoly)
+table(testResults$OBS == testResults$KNN)
+table(testResults$OBS == testResults$RF)
+```
+```{r}
+ldaCM <- confusionMatrix(lda_up_stroke, norm = "none")
+ldaCM
+```
+```{r}
+glmCM <- confusionMatrix(glmn_up_stroke, norm = "none")
+glmCM
+```
+```{r}
+nscCM <- confusionMatrix(nsc_up_stroke, norm = "none")
+nscCM
+```
+
+```{r}
+marsCM <- confusionMatrix(mars_up_stroke, norm = "none")
+marsCM
+```
+```{r}
+svmRCM <- confusionMatrix(svmR_up_stroke, norm = "none")
+svmRCM
+```
+```{r}
+svmPCM <- confusionMatrix(svmP_up_stroke, norm = "none")
+svmPCM
+```
+
+```{r}
+knnCM <- confusionMatrix(knn_up_stroke, norm = "none")
+knnCM
+```
+```{r}
+rfCM <- confusionMatrix(rf_up_stroke, norm = "none")
+rfCM
+```
+```{r}
+ldaRoc <- roc(response = lda_up_stroke$pred$obs,
+              predictor = lda_up_stroke$pred$YES,
+              levels = rev(levels(lda_up_stroke$pred$obs)))
+glmRoc <- roc(response = glmn_up_stroke$pred$obs,
+              predictor = glmn_up_stroke$pred$YES,
+              levels = rev(levels(glmn_up_stroke$pred$obs)))
+nscRoc <- roc(response = nsc_up_stroke$pred$obs,
+              predictor = nsc_up_stroke$pred$YES,
+              levels = rev(levels(nsc_up_stroke$pred$obs)))
+marsRoc <- roc(response = mars_up_stroke$pred$obs,
+               predictor = mars_up_stroke$pred$YES,
+               levels = rev(levels(mars_up_stroke$pred$obs)))
+svmRRoc <- roc(response = svmR_up_stroke$pred$obs,
+               predictor = svmR_up_stroke$pred$YES,
+               levels = rev(levels(svmR_up_stroke$pred$obs)))
+knnRoc <- roc(response = knn_up_stroke$pred$obs,
+              predictor = knn_up_stroke$pred$YES,
+              levels = rev(levels(knn_up_stroke$pred$obs)))
+rfRoc <- roc(response = rf_up_stroke$pred$obs,
+             predictor = rf_up_stroke$pred$YES,
+             levels = rev(levels(rf_up_stroke$pred$obs)))
+```
+```{r}
+plot(ldaRoc, type = "s", col = 'red', legacy.axes = TRUE)
+plot(glmRoc, type = "s", add = TRUE, col = 'green', legacy.axes = TRUE)
+plot(nscRoc, type = "s", add = TRUE, col = 'blue', legacy.axes = TRUE)
+plot(marsRoc, type = "s", add = TRUE, col = 'yellow', legacy.axes = TRUE)
+plot(knnRoc, type ="s", add =TRUE, col = 'pink', legacy.axes = TRUE)
+plot(rfRoc, type = "s", add= TRUE, legacy.axes = TRUE)
+legend("bottomright", legend=c("LDA", "GLMNET", "NSC", "MARS","KNN","RF"),
+col=c("red", "green","blue","yellow","pink", "black"), lwd=2)
+title(main = "Compare ROC curves from different models", outer = TRUE)
+```
