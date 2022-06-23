@@ -1,0 +1,317 @@
+---
+title: "Stroke_modeling"
+author: "Stephen Kuc"
+date: '2022-06-23'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# uploading training and test set
+# training is oversampled
+
+test <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/testStroke.csv")
+train <- read.csv("c:/Users/steph/OneDrive/Documents/USD/ADS503/trainStrokeOs.csv")
+
+```
+```{r}
+# loading in necessary libraries
+library(caret) # for training models
+library(e1071) 
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+train$stroke <- as.factor(train$stroke)
+test$stroke <- as.factor(test$stroke)
+```
+
+### Logistic Regression:
+```{r}
+# setting stratified random sampling ctrl variable
+ctrl <- trainControl(method="cv", 
+                       number = 10,
+                       classProbs = T,
+                       summaryFunction = twoClassSummary,
+                     savePredictions = T)
+# logistic regression
+set.seed(101)
+lr <- train(stroke ~., data = train, 
+                method = "glm",
+                metric = "ROC",
+                trControl = ctrl)
+lr
+```
+### LDA:
+```{r}
+set.seed(102)
+
+lda <- train(stroke ~., data = train, 
+                method = "lda",
+                metric = "ROC",
+                trControl = ctrl)
+lda
+```
+### Penalized Logistic Regression
+```{r}
+# tuning parameter
+glmnGrid <- expand.grid(alpha = c(0,.1, .2, .4, .6, .8, 1))
+lambda <- seq(.01,.2,length = 10)
+# Str for stratified, Os for OverSampled
+glmn <- train(stroke ~., data = train, 
+                method = "glmnet",
+                tunGrid = glmnGrid,
+                metric = "ROC",
+                trControl = ctrl)
+glmn
+```
+### Nearest Shrunken Centroid
+```{r}
+set.seed(101)
+nscStr <- train(stroke ~., data = train, 
+                method = "pam",
+                tuneGrid = data.frame(threshold = seq(0,25,30)),
+                metric = "ROC",
+                trControl = ctrl)
+nscStr
+```
+
+# MDA
+```{r}
+
+mda <- train(stroke ~., data = train, 
+                method = "mda",
+                tuneGrid = expand.grid(.subclasses = 1:6),
+                metric = "ROC",
+                trControl = ctrl)
+mda
+```
+### MARS
+```{r}
+
+set.seed(500)
+marsTune_stroke <- train(stroke ~., data = train,
+                         method = "earth",
+                         tuneGrid = expand.grid(degree = 1, nprune = 2:38),
+                         trControl = ctrl)
+marsTune_stroke
+marsTune_stroke$finalModel
+```
+### KNN Model
+```{r}
+set.seed(500)
+knnTune_stroke <- train(stroke ~., data = train,
+                        method = "knn",
+                        tuneGrid = data.frame(k = 1:30),
+                        trControl = ctrl)
+knnTune_stroke
+```
+
+### Random Forest
+
+```{r}
+mtryGrid <- data.frame(mtry = floor(seq(10, 
+                                      ncol(train[1:4])/3, 
+                                        length = 10)))
+set.seed(500)
+rfTune_stroke <- train(stroke ~., data = train,
+                method = "rf",
+                tuneGrid = mtryGrid,
+                ntree = 500,
+                importance = TRUE,
+                trControl = ctrl)
+rfTune_stroke
+```
+# naive Bayes
+```{r}
+nb <- naiveBayes(stroke ~ ., data = train)
+nb
+```
+
+### Neural Network
+```{r}
+# setting hyperparameters to tune over
+nnCtrl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           repeats = 5, 
+                           classProbs = TRUE, 
+                           summaryFunction = twoClassSummary)
+nnetGrid <- expand.grid(size = seq(1,10,1), decay = seq(.1,.5,.1))
+
+set.seed(101)
+# training w/ oversampling
+
+# nnet <- train(stroke ~., data = train,
+                method = "nnet",
+                metric = "ROC",
+                verbose  = FALSE,
+                tuneGrid = nnetGrid,
+                MaxNWts = 5 * (ncol(train) + 1) + 5 + 1,
+                trControl = nnCtrl)
+
+# nnet
+
+```
+### SVM 
+```{r}
+library(kernlab)
+
+# svm = tune(svm, stroke ~ ., 
+             data = train,
+             ranges = list(gamma = 2^(-1:2), cost = 2^(2:4)),
+             tunecontrol = tune.control(sampling = "fix"),
+             type = 'C-classification',
+             kernel = 'radial')
+# svm
+```
+
+```{r}
+
+svmGrid <- expand.grid(degree = 1:2, scale = c(0.01, 0.005, 0.001), C = 2^(-2:5))
+set.seed(500)
+#options(warn=-1)
+# svmP <- train(stroke ~., train,
+                         method = "svmPoly",
+                         metric = "ROC",
+                         tuneGrid = svmGrid,
+                         trControl = ctrl)
+# svmP
+
+```
+
+
+
+```{r}
+testResults <- data.frame(OBS = test$stroke, Logistic_Reg = predict(lr, test[1:4]))
+testResults$LDA <- predict(lda, test[1:4])
+testResults$GLMN <- predict(glmn, test[1:4])
+testResults$NSC <- predict(nscStr, test[1:4])
+testResults$mda <- predict(mda,test[1:4])
+testResults$Mars <- predict(marsTune_stroke, test[1:4])
+# testResults$SVMRadial <- predict(svm, test[1:4])
+# testResults$SVMPoly <- predict(svmP, test[1:4])
+testResults$KNN <- predict(knnTune_stroke, test[1:4])
+testResults$RF <- predict(rfTune_stroke, test[1:4])
+testResults$NB <- predict(nb, newdata = test[1:4])
+testResults$NNet <- predict(nnet, test[1:4])
+
+table(testResults$OBS == testResults$LDA)
+table(testResults$OBS == testResults$GLMN)
+table(testResults$OBS == testResults$NSC)
+table(testResults$OBS == testResults$Mars)
+# table(testResults$OBS == testResults$SVMRadial)
+# table(testResults$OBS == testResults$SVMPoly)
+table(testResults$OBS == testResults$KNN)
+table(testResults$OBS == testResults$RF)
+table(testResults$OBS == testResults$NB)
+table(testResults$OBS == testResults$NNet)
+table(testResults$OBS == testResults$mda)
+```
+```{r}
+table(testResults$OBS == testResults$LDA)
+table(testResults$OBS == testResults$GLMN)
+table(testResults$OBS == testResults$NSC)
+table(testResults$OBS == testResults$Mars)
+# table(testResults$OBS == testResults$SVMRadial)
+# table(testResults$OBS == testResults$SVMPoly)
+table(testResults$OBS == testResults$KNN)
+table(testResults$OBS == testResults$RF)
+table(testResults$OBS == testResults$NB)
+table(testResults$OBS == testResults$NNet)
+table(testResults$OBS == testResults$mda)
+```
+
+
+```{r}
+lrCM <- confusionMatrix(testResults$OBS,testResults$Logistic_Reg)
+lrCM
+```
+
+```{r}
+ldaCM <- confusionMatrix(testResults$OBS,testResults$LDA)
+ldaCM
+```
+```{r}
+glmCM <- confusionMatrix(testResults$OBS,testResults$GLMN)
+glmCM
+```
+```{r}
+nscCM <- confusionMatrix(testResults$OBS,testResults$NSC)
+nscCM
+```
+
+```{r}
+marsCM <- confusionMatrix(testResults$OBS,testResults$Mars)
+marsCM
+```
+```{r}
+knnCM <- confusionMatrix(testResults$OBS,testResults$KNN)
+knnCM
+```
+```{r}
+testResults$OBS <- ifelse(testResults$OBS == "YES ", 1, 0)
+testResults$RF <- ifelse(testResults$RF == "YES", 1, 0)
+rfCM <- confusionMatrix(testResults$OBS,testResults$RF)
+rfCM
+```
+```{r}
+svmCM <- testResults$OBS,testResults$KNN
+svmCM
+```
+
+```{r}
+nbCM <- confusionMatrix(testResults$OBS,testResults$NB)
+nbCM
+```
+
+```{r}
+nNetCM <- confusionMatrix(nnet, norm = "none")
+nNetCM
+```
+```{r}
+mdaCm <- confusionMatrix(testResults$OBS,testResults$mda)
+mdaCm 
+```
+```{r}
+ldaRoc <- roc(response = lda$pred$obs,
+              predictor = lda$pred$YES,
+              levels = rev(levels(lda$pred$obs)))
+glmRoc <- roc(response = glmn$pred$obs,
+              predictor = glmn$pred$YES,
+              levels = rev(levels(glmn$pred$obs)))
+nscRoc <- roc(response = nscStr$pred$obs,
+              predictor = nscStr$pred$YES,
+              levels = rev(levels(nscStr$pred$obs)))
+marsRoc <- roc(response = marsTune_stroke$pred$obs,
+               predictor = marsTune_stroke$pred$YES,
+               levels = rev(levels(marsTune_stroke$pred$obs)))
+knnRoc <- roc(response = knnTune_stroke$pred$obs,
+              predictor = knnTune_stroke$pred$YES,
+              levels = rev(levels(knnTune_stroke$pred$obs)))
+rfRoc <- roc(response = rfTune_stroke$pred$obs,
+             predictor = rfTune_stroke$pred$YES,
+             levels = rev(levels(rfTune_stroke$pred$obs)))
+# nNetRoc <- roc(response = nnet$pred$obs, predictor = nnet$pred$YES, levels = rev(levels(nnet$pred$obs)))
+mdaRoc <- roc(response = mda$pred$obs,
+             predictor = mda$pred$YES,
+             levels = rev(levels(mda$pred$obs)))
+```
+```{r}
+plot(ldaRoc, type = "s", col = 'red', legacy.axes = TRUE)
+plot(glmRoc, type = "s", add = TRUE, col = 'green', legacy.axes = TRUE)
+plot(nscRoc, type = "s", add = TRUE, col = 'blue', legacy.axes = TRUE)
+plot(marsRoc, type = "s", add = TRUE, col = 'yellow', legacy.axes = TRUE)
+plot(knnRoc, type ="s", add =TRUE, col = 'pink', legacy.axes = TRUE)
+plot(rfRoc, type = "s", add= TRUE, legacy.axes = TRUE)
+plot(nNetRoc, type = "s", add= TRUE, legacy.axes = TRUE)
+plot(mdaRoc, type = "s", add= TRUE, legacy.axes = TRUE)
+legend("bottomright", legend=c("LDA", "GLMNET", "NSC", "MARS","KNN","RF","neuralNet","mda"),
+col=c("red", "green","blue","yellow","pink", "black"), lwd=2)
+title(main = "Compare ROC curves from different models", outer = TRUE)
+```
