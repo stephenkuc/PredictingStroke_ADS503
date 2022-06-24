@@ -1,0 +1,253 @@
+---
+title: "Predicting Stroke in Healthcare Patients"
+author: '"Saba_Alemayehu"'
+date: "6/20/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+# Importing the data
+```{r}
+stroke_CSV<- read.csv("dataset-stroke-data.csv")
+```
+
+```{r}
+table(stroke_CSV$stroke)
+```
+
+# encoding the variables into numeric and factors
+```{r}
+stroke_CSV$bmi <- as.numeric(stroke_CSV$bmi)
+stroke_CSV$gender <- as.factor(stroke_CSV$gender)
+stroke_CSV$work_type<-as.factor(stroke_CSV$work_type)
+stroke_CSV$ever_married <- as.factor(stroke_CSV$ever_married)
+stroke_CSV$Residence_type <- as.factor(stroke_CSV$Residence_type)
+stroke_CSV$smoking_status <- as.factor(stroke_CSV$smoking_status)
+
+stroke_CSV$stroke <- ifelse(stroke_CSV$stroke == 1, "yes", "no")
+
+stroke_CSV$stroke<-as.factor(stroke_CSV$stroke)
+table(stroke_CSV$stroke)
+```
+
+# Data Visualization
+```{r}
+# histogram of numeric variables
+par(mfrow=c(1,3))
+hist( stroke_CSV$age ) 
+hist( stroke_CSV$bmi )
+hist( stroke_CSV$avg_glucose_level )
+```
+# convert factors into dummy variables
+
+```{r}
+#create dummy variable 
+dummy_varv02<-dummyVars(~gender+ever_married + work_type+ Residence_type+smoking_status, data=stroke_CSV,fullRank = T)
+dummy_df1<-data.frame(predict(dummy_varv02,stroke_CSV))
+head(dummy_df1)
+# combine origional data and dummy data frame
+combinedDf<-cbind(dummy_df1,stroke_CSV)
+head(combinedDf)
+# remove the redundunt column
+stroke_dm <-dplyr::select(combinedDf, -c('gender', 
+                                         'ever_married',
+                                         'work_type',
+                                         'Residence_type', 
+                                         'smoking_status'))
+                                         
+                                            
+                                           
+                                           
+                                           
+#head(stroke_dm)
+str(stroke_dm)
+```
+
+# remove unwanted columns
+```{r}
+stroke_dm = subset(stroke_dm, select = -c(id) )
+#stroke_dm$stroke<-as.factor(stroke_dm$stroke)
+str(stroke_dm)
+```
+
+```{r}
+#head(stroke_dm)
+table(stroke_dm$stroke)
+```
+
+
+# Data Spliting and data preprocessing
+```{r}
+pre_heni = subset(stroke_dm, select = -c(stroke) )
+pre_heni
+res_heni<-stroke_dm$stroke
+
+set.seed(100)
+training_rowSt1<-createDataPartition(res_heni, p=0.8, list=FALSE)
+
+strok_prTrainX2<-pre_heni[training_rowSt1,]
+strok_prTestX1<-pre_heni[-training_rowSt1,]
+
+stroke_reTrY1<-res_heni[training_rowSt1]
+stroke_reTesY1<-res_heni[-training_rowSt1]
+str(stroke_reTrY1)
+```
+
+# Impute the missing value
+```{r}
+trainimpu1<-preProcess(strok_prTrainX2,"knnImpute")
+
+strokeTrprX<-predict(trainimpu1,strok_prTrainX2)
+
+
+strokeTeprX<-predict(trainimpu1,strok_prTestX1)
+#str(strokeTeprX)
+```
+
+
+# Develop a model
+```{r}
+#library(caret)
+#library(pROC)
+#Logistic Regression
+ctrl<-trainControl(method="LGOCV",
+                   summaryFunction=twoClassSummary,
+                   classProbs = TRUE,
+                   savePredictions = TRUE,
+                   sampling = "up")
+                
+set.seed(300)
+lrSfit<-train(x=strokeTrprX, y=stroke_reTrY1,
+             method = "glm",
+             metric="ROC",
+             preProcess = c("center","scale"),
+             trControl=ctrl)
+lrSfit
+```
+
+# Linear Discriminant Analysis:
+
+```{r}
+set.seed(300)
+lda.classifier = train(x=strokeTrprX, 
+                       y=stroke_reTrY1,
+                       method = "lda",
+                       preProc = c("center", "scale"),
+                       metric = "ROC",
+                       trControl = ctrl)
+lda.classifier
+```
+
+# Penalized Methods
+```{r}
+glmnGrid = expand.grid(.alpha = c(0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0), .lambda = seq(0.01, 0.2, length=40))
+set.seed(300)
+glmnet.classifier = train(x=strokeTrprX,
+                          y=stroke_reTrY1,
+                          method = "glmnet",
+                          tuneGrid = glmnGrid,
+                          preProc = c("center", "scale"),
+                          metric = "ROC",
+                          trControl = ctrl)
+glmnet.classifier
+```
+
+# Nearest shrunken Centroids:
+```{r}
+# Nearest shrunken Centroids:
+nscGrid = expand.grid(.threshold = 0:25)
+set.seed(300)
+nsc.classifier = train(x=strokeTrprX,
+                       y=stroke_reTrY1,
+                       method = "pam",
+                       tuneGrid = nscGrid,
+                       preProc = c("center", "scale"),
+                       metric = "ROC",
+                       trControl = ctrl)
+nsc.classifier
+
+```
+
+# k-nearest model
+```{r}
+set.seed(300)
+knnModel = train(x=strokeTrprX,
+                 y=stroke_reTrY1, 
+                 method="knn", 
+                 preProc = c("center", "scale"), 
+                 tuneLength=10,
+                 trControl = ctrl)
+knnModel
+```
+
+
+# A Neural Network model
+
+```{r}
+
+nnGrid = expand.grid( .decay=c(0,0.01,0.1), .size=1:10, .bag=FALSE )
+set.seed(300)
+nnetModel = train(x=strokeTrprX,
+                  y=stroke_reTrY1, 
+                  method="nnet",
+                  metric = "ROC",
+                  preProc = c("center", "scale"),
+                  linout=FALSE,
+                  trace=FALSE,
+                  MaxNWts=10 *(ncol(strokeTrprX)+1) + 10 + 1, maxit=500,trControl = ctrl)
+nnetModel
+
+```
+
+# MARS model
+```{r}
+marsGrid = expand.grid(.degree=1, .nprune=2:10)
+set.seed(300)
+marsModel = train(x=strokeTrprX, 
+                  y=stroke_reTrY1,
+                  method="earth",
+                  metric = "ROC",
+                  preProc = c("center", "scale"),
+                  tuneGrid=marsGrid,
+                  trControl = ctrl)
+
+marsModel  
+str(stroke_reTrY1)
+
+```
+
+# A Support Vector Machine (SVM)
+
+```{r}
+
+set.seed(300)
+svmModel = train(x=strokeTrprX,
+                 y=stroke_reTrY1,
+                 method="svmRadial",
+                 ppreProc = c("center", "scale"),
+                 tuneLength=10)
+                 
+
+svmModel
+
+```
+
+# Random Forest 
+```{r}
+library(randomForest)
+rfModel = randomForest( stroke_reTrY1 ~ ., data=strokeTrprX,metric = "ROC", importance=TRUE, ntree=1000,trControl = ctrl)
+rfModel
+```
+
+
+
