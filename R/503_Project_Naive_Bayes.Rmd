@@ -1,0 +1,57 @@
+Loading the packages
+```{r}
+library(caret)
+library(e1071)
+library(Hmisc)
+library(corrplot)
+library(plyr)
+library(pROC)
+```
+
+```{r}
+stroke<- read.csv('c:\\maha\\503\\healthcare-dataset-stroke-data.csv', header = TRUE)
+```
+```{r}
+stroke$stroke<-ifelse(stroke$stroke == 1,"YES","NO")
+table(stroke$stroke)
+```
+```{r}
+stroke$gender <- as.numeric(as.factor(stroke$gender))
+stroke$ever_married <- as.numeric(as.factor(stroke$ever_married))
+stroke$work_type <- as.numeric(as.factor(stroke$work_type))
+stroke$Residence_type <- as.numeric(as.factor(stroke$Residence_type))
+stroke$smoking_status <- as.numeric(as.factor(stroke$smoking_status))
+stroke$bmi <- as.numeric(stroke$bmi)
+#stroke$stroke <- as.factor(stroke$stroke)
+```
+```{r}
+trainingRows <- createDataPartition(stroke$stroke, p = .80, list = FALSE)
+stroke_train <- stroke[trainingRows, ]
+stroke_test <- stroke[-trainingRows, ]
+stroke_trainx <- stroke_train[,1:11]
+stroke_trainy <- as.factor(stroke_train[, 12])
+stroke_trainimp <- preProcess(stroke_trainx, "knnImpute")
+stroke_trainxpr <- predict(stroke_trainimp, stroke_trainx)
+stroke_testxpr <- predict(stroke_trainimp, stroke_test)
+```
+```{r}
+nb_stroke <- naiveBayes(stroke ~ ., data = stroke_train)
+nb_stroke
+```
+
+```{r}
+#head(stroke_testxpr)
+dim(stroke_testxpr)
+stroke_testXpr <- stroke_testxpr[, -12]
+stroke_testy <- stroke_testxpr[,12]
+```
+```{r}
+testResults$NB <- predict(nb_stroke, newdata = stroke_testxpr)
+```
+```{r}
+table(testResults$OBS == testResults$NB)
+```
+```{r}
+nbCM <- confusionMatrix(table(testResults$OBS, testResults$NB)) 
+nbCM
+```
